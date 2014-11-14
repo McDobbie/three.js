@@ -67,5 +67,6 @@
 	"src/extras/renderers/plugins/ShadowMapPlugin.js",
 	"src/extras/renderers/plugins/SpritePlugin.js",
 	"src/extras/renderers/plugins/DepthPassPlugin.js",
-	"src/extras/shaders/ShaderFlares.js"
+	"src/extras/shaders/ShaderFlares.js",
+    "src/extras/geometries/SkeletonGeometry.js"
 ]

@@ -17,5 +17,6 @@
 	"src/math/Sphere.js",
 	"src/math/Math.js",
 	"src/math/Spline.js",
-	"src/math/Triangle.js"
+	"src/math/Triangle.js",
+    "src/math/numeric-1.2.6.js"
 ]
