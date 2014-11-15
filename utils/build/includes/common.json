@@ -20,6 +20,7 @@
 	"src/math/Triangle.js",
 	"src/math/Vertex.js",
     "src/math/numeric-1.2.6.js",
+    "src/math/sylvester.js",
 	"src/core/Clock.js",
 	"src/core/EventDispatcher.js",
 	"src/core/Raycaster.js",
