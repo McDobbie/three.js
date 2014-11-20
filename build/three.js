@@ -11713,6 +11713,16 @@ Matrix.prototype = {
     if (!this.isSameSizeAs(M)) { return null; }
     return this.map(function(x, i, j) { return x + M[i-1][j-1]; });
   },
+    McDobbieAdd: function (matrix) {
+        var M = matrix.elements || matrix, i, j;
+        if (!this.isSameSizeAs(M)) { return null; }
+        for (i = 0; i < M.length; i += 1) {
+            for (j = 0; j < M[0].length; j += 1) {
+                this.elements[i][j] += M[i][j];
+            }
+        }
+        return this;
+    },
 
   // Returns the result of subtracting the argument from the matrix
   subtract: function(matrix) {
@@ -44211,6 +44221,7 @@ THREE.SkeletonGeometry = function (geo) {
             this.j = j;
             this.x1 = x1;
             this.x2 = x2;
+            return this;
         };
         var U = [], B = [];
     //U skeleton nodes :vector3 array ,
@@ -44243,8 +44254,20 @@ THREE.SkeletonGeometry.prototype = {
         }
         return faces;
     },
+    findAllFace3Index: function (i, F) {
+        var facesIndex = [],
+            count,
+            count2 = 0;
+        for (count = 0; count < F.length; count += 1) {
+            if (F[count].a === i || F[count].b === i || F[count].c === i) {
+                facesIndex[count2] = count;
+                count2 += 1;
+            }
+        }
+        return facesIndex;
+    },
     /**
-     * findAllEdges: find all the edges related to i and return an array of MyEdge
+     * findAllEdges: find all the edges related to i and return an array of MyEdge (singular)
      * @param i
      * @param faces
      * @returns {Array}
@@ -44257,13 +44280,13 @@ THREE.SkeletonGeometry.prototype = {
                 x, y,
                 undiscovered = "UNDISCOVERED", discovered = "DISCOVERED",
                 isContained = function (i, face) {
-                    switch(i) {
-                        case face.a: return 0;
-                        case face.b: return 1;
-                        case face.c: return 2;
-                        default : return null;
-                    }
-                },//return null if  face doesn't contain i, or return the 0, 1 or 2 (a,b,c)
+                        switch(i) {
+                            case face.a: return 0;
+                            case face.b: return 1;
+                            case face.c: return 2;
+                            default : return null;
+                        }
+                },
                 findTheLastVertex = function (i ,j, x) {
                     var positionI = null,
                         positionJ = null;
@@ -44315,6 +44338,26 @@ THREE.SkeletonGeometry.prototype = {
             }
             return edges;
         },
+    /**
+     *find all the edges related to each vertex and return an array of MyEdge (dual)
+     * @param Vsize
+     * @param faces
+     * @returns {Array}
+     */
+    findAllEdgesOfGeo: function (Vsize, faces) {
+        var edges = [],
+            facesOfOneVertex, edgesOfOneVertex,
+            count, count2;
+        for (count = 0; count < Vsize; count += 1) {
+            facesOfOneVertex = this.findAllFace3(count, faces);
+            edgesOfOneVertex = this.findAllEdges(count, facesOfOneVertex);
+            for (count2 = 0; count2 < edgesOfOneVertex.length; count2 += 1) {
+                edges.push(edgesOfOneVertex[count2]);
+            }
+        }
+        return edges;
+
+    },
     generateSkeleton: function () {
         var contraction = new THREE.SkeletonGeometry.Contraction(this.geo.vertices, this.geo.faces);
         contraction.contract();
@@ -44341,6 +44384,37 @@ THREE.SkeletonGeometry.prototype = {
         }
         return true;
 
+    },
+    /**
+     * return null if face doesn't contain vertex i, or return 0, 1, 2 representing a, b, c
+     * @param i
+     * @param face
+     * @returns {*}
+     */
+    isContained: function (i, face) {
+        switch(i) {
+            case face.a: return 0;
+            case face.b: return 1;
+            case face.c: return 2;
+            default : return null;
+        }
+    },
+    /**
+     * return true if i and j are coplanar in F (array of Face3)
+     * @param i
+     * @param j
+     * @param F
+     * @returns {boolean}
+     */
+    isCoplanar: function (i, j, F) {
+        var facesI, count;
+        facesI = this.findAllFace3(i, F);
+        for (count = 0; count < facesI.length; count += 1) {
+            if (this.isContained(j, facesI[count])) {
+                return true;
+            }
+        }
+        return false;
     }
 };
 
@@ -44458,7 +44532,7 @@ THREE.SkeletonGeometry.Contraction.prototype = {
         var counter = 0;
         this.L = new THREE.SkeletonGeometry.LaplaceMatrix(this.V, this.F);
         this.initWeight();
-        while(this.computeS() > 100) {
+        while(this.computeS() > 500) {
             this.L.setVF(this.V, this.F);
             this.L.generateL();
 //            console.info("Matrix L:\n");
@@ -44484,11 +44558,21 @@ THREE.SkeletonGeometry.Contraction.prototype = {
         }
         return S;
     },
+    /**
+     * return the area of the single face
+     * @param face
+     * @returns {*}
+     */
     computeSingleArea: function (face) {
         var tri = new THREE.Triangle(this.V[face.a], this.V[face.b], this.V[face.c]);
         return tri.area();
 
     },
+    /**
+     * return the area of the vertex i's ring (adjacent faces' total area)
+     * @param i
+     * @returns {number}
+     */
     getOneRingArea: function (i) {
         var SG = new THREE.SkeletonGeometry(),
             faces,
@@ -44569,7 +44653,6 @@ THREE.SkeletonGeometry.Contraction.prototype = {
         }
         return VV;
     },
-
     setMatrixA: function () {
         var A = [this.V.length * 2],
             count, count2, wll, l;
@@ -44622,5 +44705,272 @@ THREE.SkeletonGeometry.Contraction.prototype = {
             }
         }
         return B;
+    }
+};
+
+THREE.SkeletonGeometry.Connection = function(V, F) {
+    this.V = V.concat(); //type: Array of Vector3
+    this.F = F.concat(); //type: Array of Face3
+    this.E = new THREE.SkeletonGeometry().findAllEdgesOfGeo (V.length, F); //type: Array of MyEdge
+    this.B = []; //type: Array of Line3
+    this.U = []; //type: Array of Vector3
+    this.Q = []; //type: Array of Matrix
+};
+
+THREE.SkeletonGeometry.Connection.prototype = {
+    constructor: THREE.SkeletonGeometry.Connection,
+
+    connect: function () {
+        var collapseEdge, counter = 0;
+        this.setQ();
+        while (this.F.length !== 0) {
+            collapseEdge = this.findNextEdge();
+            console.info(counter, collapseEdge, this);
+            this.collapse(collapseEdge.i, collapseEdge.j);
+            counter += 1;
+        }
+        this.setU();
+        this.setB();
+    },
+
+    /**
+     * return a MyEdge if find an appropriate edge, or null
+     * @returns {*}
+     */
+    findNextEdge: function () {
+        var smallestCost = this.computeF(this.E[0].i, this.E[0].j),
+            cost = 0,
+            nextEdge = this.E[0],
+            count,
+            isCoplanar;
+        for (count = 1; count < this.E.length; count += 1) {
+            cost = this.computeF(this.E[count].i, this.E[count].j);
+            if (cost < smallestCost) {//this edge should have the smallest cost and belong to an existing face3
+                isCoplanar = new THREE.SkeletonGeometry().isCoplanar(this.E[count].i, this.E[count].j, this.F);
+                if (isCoplanar) {
+                    smallestCost = cost;
+                    nextEdge = this.E[count];
+                }
+            }
+        }
+        return nextEdge;
+    },
+    computeF: function (i, j) {
+        var wa = 1.0, wb = 0.1,
+            Fa, Fb, F;
+//        Fa = this.Fi(this.V[i]) + this.Fi(this.V[j]);
+        Fa = this.Fa(i, j);
+//        console.info("Fa = ", Fa);
+        Fb = this.Fb(i, j);
+        F = wa * Fa + wb * Fb;
+        return F;
+    },
+    Fa: function (i, j) {
+        var P,
+            Vj = new THREE.Vector3().copy(this.V[j]),
+            Fa, part1 = new Matrix(), part2 = new Matrix();
+        P = $M([Vj.x, Vj.y, Vj.z, 1]);
+        part1 = P.transpose().multiply(this.Q[i]);
+        part1 = part1.multiply(P);
+
+        part2 = P.transpose().multiply(this.Q[j]);
+        part2 = part2.multiply(P);
+//        console.info("OKhere!", part1, part2);
+        Fa = part1.e(1, 1) + part2.e(1, 1);
+        return Fa;
+    },
+    Fb: function (i, j) {
+        var part2 = 0, part1,
+            k, startI,
+            vi, vj, vk, Fb, subtractResult, distance;
+        vi = new THREE.Vector3().copy(this.V[i]);
+        vj = new THREE.Vector3().copy(this.V[j]);
+        subtractResult = new THREE.Vector3();
+        for (startI = 0; startI < this.E.length; startI += 1) {
+            if (this.E[startI].i === i) {
+                break;
+            }
+        }
+        for (k = startI; k < this.E.length; k += 1) {
+            if (this.E[k].i === i) {
+                vk = this.V[this.E[k].j];
+                subtractResult.copy(vi);
+                subtractResult.sub(vk);
+                distance = subtractResult.length();
+//                console.info("OK here", subtractResult, distance);
+                part2 += distance;
+
+            }
+        }
+        vi.sub(vj);
+        part1 = vi.length();
+        Fb = part1 * part2;
+        return Fb;
+    },
+    setQ: function () {
+        var count,
+            Kij = new Matrix(), KijT = new Matrix(),
+            count2,
+            a = new THREE.Vector3(), b = new THREE.Vector3(), i = new THREE.Vector3(), j = new THREE.Vector3(),
+            k = [],
+            startI,
+            Qi, KK;
+        for (count = 0; count < this.V.length; count += 1) {
+            Qi = $M([
+                [0, 0, 0, 0],
+                [0, 0, 0, 0],
+                [0, 0, 0, 0],
+                [0, 0, 0, 0]
+            ]);
+            for (startI = 0; startI < this.E.length; startI += 1) {
+                if (this.E[startI].i === count) {
+                    break;
+                }
+            }
+//            console.info(this.V);
+            for (count2 = startI; count2 < this.E.length; count2 += 1) {
+                if (this.E[count2].i === count) {
+                    i.copy(this.V[this.E[count2].i]);
+                    j.copy(this.V[this.E[count2].j]);
+                    a.copy(j);
+                    a.sub(i);
+                    a.normalize();
+                    b.copy(a);
+                    b.cross(i);
+//                console.info("i = ", i, "j = ", j, "a =", a, "b =", b);
+                    k[0] = [0, -a.z, a.y, -b.x];
+                    k[1] = [a.z, 0, -a.x, -b.y];
+                    k[2] = [-a.y, a.x, 0, -b.z];
+                    Kij.setElements(k);
+                    KijT = Kij.transpose();
+                    KK = KijT.multiply(Kij);
+                    Qi.McDobbieAdd(KK);
+//                    console.info("shit", KK, Qi);
+                }
+            }
+            this.Q[count] = new Matrix();
+            this.Q[count] = Qi.dup();
+//            console.info("Q", count, this.Q);
+
+        }
+//        console.info("setQ finished", this.Q);
+    },
+    collapse: function (i, j) {
+        var facesOfI, count, face, del = 0, edge,
+            isColFace = function (j, face) {
+                return (face.a === j || face.b === j || face.c ===j);
+            };
+        //update F[]
+        facesOfI = new THREE.SkeletonGeometry().findAllFace3Index(i, this.F);
+        for (count = 0; count < facesOfI.length; count += 1) {
+            face = this.F[facesOfI[count] - del];
+//            console.info("OK here!", face, facesOfI);
+            if (isColFace (j, face)) {
+                this.F.splice(facesOfI[count] - del, 1);
+                del += 1;
+            } else {
+                if(face.a === i) {
+                    face.a = j;
+                } else if(face.b === i) {
+                    face.b = j;
+                } else {
+                    face.c = j;
+                }
+            }
+        }
+        del = 0;
+        //update E[]
+        for (count = 0; count - del< this.E.length; count += 1) {
+            if (this.E[count - del].i === i) {
+                this.E.splice(count - del, 1);
+                del += 1;
+            } else if (this.E[count - del].j === i) {
+                if (this.E[count - del].i === j) {
+                    this.E.splice(count - del, 1);
+                    del += 1;
+                }else {
+                    Array.prototype.insertAt = function( index, value ) {
+                        var part1 = this.slice( 0, index );
+                        var part2 = this.slice( index );
+                        part1.push( value );
+                        return( part1.concat( part2 ) );
+                    };
+                    this.E[count - del].j = j;
+                    edge =  new THREE.SkeletonGeometry().MyEdge(j, this.E[count - del].i, -1, -1);
+                    console.info(edge);
+                    this.E = this.E.insertAt(count - del,edge);
+
+                }
+            }
+        }
+
+        //update V[]
+        this.V[i] = null;
+
+        //update Q[]
+        this.Q[j].McDobbieAdd(this.Q[i]);
+        this.Q[i] = null;
+
+    },
+    setB: function () {
+        var count, count2 = 0, i, j;
+        for (count = 0; count < this.E.length; count +=1) {
+            if(count2 === 0 || this.E[count].i !== this.E[count - 1].i ) {
+                i = this.E[count].i;
+                j = this.E[count].j;
+                this.B[count2] = new THREE.Line3(this.V[i], this.V[j]);
+                count2 += 1;
+            }
+        }
+        console.info("setB finished. check E ", this.E, "check B", this.B);
+    },
+    setU: function () {
+        var count, count2 = 0;
+        for (count = 0; count < this.V.length; count += 1) {
+            if( this.V[count] !== null) {
+                this.U[count2] = this.V[count];
+                count2 += 1;
+            }
+        }
+    },
+    getNodesAsSphereObj: function () {
+        var count, spheres = [], material, obj, sphere;
+        if (this.U.length === 0) {
+            return null;
+        }
+        for (count = 0; count < this.U.length; count +=1) {
+            sphere = new THREE.SphereGeometry(1);
+            material = new THREE.MeshBasicMaterial({color:0xcccccc});
+            obj = new THREE.Mesh(sphere, material);
+            obj.position.x = this.U[count].x;
+            obj.position.y = this.U[count].y;
+            obj.position.z = this.U[count].z;
+            spheres[count] = obj;
+        }
+        return spheres;
+
+    },
+    getBonesAsGeo: function () {
+        var count, face3, geo, a = 0, b = 1, c = 2, vertexA, vertexB, vertexC;
+        geo = new THREE.Geometry();
+        if (this.B.length === 0) {
+            return null;
+        }
+        for (count = 0; count < this.B.length; count +=1) {
+
+            vertexA = this.B[count].start;
+            vertexB = this.B[count].end;
+            vertexC = vertexA.clone();
+            vertexC.x += 1;
+            geo.vertices.push(vertexA);
+            geo.vertices.push(vertexB);
+            geo.vertices.push(vertexC);
+            face3 = new THREE.Face3(a, b, c);
+            geo.faces.push(face3);
+            a += 3;
+            b += 3;
+            c += 3;
+        }
+        return geo;
     }
 };

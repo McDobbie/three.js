@@ -418,6 +418,16 @@ Matrix.prototype = {
     if (!this.isSameSizeAs(M)) { return null; }
     return this.map(function(x, i, j) { return x + M[i-1][j-1]; });
   },
+    McDobbieAdd: function (matrix) {
+        var M = matrix.elements || matrix, i, j;
+        if (!this.isSameSizeAs(M)) { return null; }
+        for (i = 0; i < M.length; i += 1) {
+            for (j = 0; j < M[0].length; j += 1) {
+                this.elements[i][j] += M[i][j];
+            }
+        }
+        return this;
+    },
 
   // Returns the result of subtracting the argument from the matrix
   subtract: function(matrix) {
